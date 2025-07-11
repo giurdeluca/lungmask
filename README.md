@@ -45,6 +45,10 @@ or
 ```
 pip install git+https://github.com/JoHof/lungmask
 ```
+or via conda
+```
+conda install conda-forge::lungmask
+```
 On Windows, depending on your setup, it may be necessary to install torch beforehand: https://pytorch.org
 
 ## Runtime and GPU support
