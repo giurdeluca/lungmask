@@ -5,3 +5,6 @@ __pycache__/
 *.pyc
 **/.coverage*
 build/
+personal*
+demo*
+*.ipynb
