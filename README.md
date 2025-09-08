@@ -1,4 +1,6 @@
 # Personal documentation
+> Check [README_original](README_original.md) for further documentation and citation!
+
 - Requirements have been edited to safely set up future environments and docker image.
 - Added `lungmask_BIDS.py`: This script performs automated lung segmentation on CT images and optionally computes emphysema metrics. It supports both lung-level and lobe-level segmentation and can process multiple images in batch mode following BIDS (Brain Imaging Data Structure) naming conventions.
 
