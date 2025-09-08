@@ -118,3 +118,31 @@ The script provides comprehensive logging:
 - **Console Output**: Real-time processing updates
 - **Log File**: Detailed processing log saved to `lung_mask.log`
 - **Error Handling**: Graceful handling of processing failures
+
+## Run docker image
+
+1. Build docker image (18 GB)
+```shell
+docker build -t lungmask .
+```
+
+2. Run the container with GPU support
+> **Important**: Remember to change data paths in the input list txt file to match the docker container paths (e.g., `/app/data/...`)!
+
+```shell
+docker run --gpus all --rm \
+  -v /local/path/to/BIDS/folder:/app/data \
+  -v /local/path/to/results/folder:/app/output \
+  -v /local/path/to/input-list.txt:/app/data/input-list.txt:ro \
+  lungmask \
+  --segmentation lobes \
+  --input-list /app/data/input-list.txt \
+  --output-dir /app/output \
+  --emphysema
+```
+
+### Docker Notes
+- **GPU Support**: `--gpus all` enables GPU acceleration for faster processing
+- **File Paths**: Update your `input-list.txt` to use container paths (e.g., `/app/data/sub-001/ses-baseline/ct/sub-001_ses-baseline_ct.nii.gz`)
+- **Permissions**: Ensure the local output directory has appropriate write permissions
+- **Image Size**: The Docker image is approximately 18 GB due to deep learning model dependencies
