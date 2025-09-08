@@ -1,117 +1,120 @@
-# Automated lung segmentation in CT under presence of severe pathologies
+# Personal documentation
+- Requirements have been edited to safely set up future environments and docker image.
+- Added `lungmask_BIDS.py`: This script performs automated lung segmentation on CT images and optionally computes emphysema metrics. It supports both lung-level and lobe-level segmentation and can process multiple images in batch mode following BIDS (Brain Imaging Data Structure) naming conventions.
 
-This package provides trained U-net models for lung segmentation. For now, four models are available:
-
-- U-net(R231): This model was trained on a large and diverse dataset that covers a wide range of visual variabiliy. The model performs segmentation on individual slices, extracts right-left lung seperately includes airpockets, tumors and effusions. The trachea will not be included in the lung segmentation. https://doi.org/10.1186/s41747-020-00173-2
-
-- U-net(LTRCLobes): This model was trained on a subset of the [LTRC](https://www.nhlbi.nih.gov/science/lung-tissue-research-consortium-ltrc) dataset. The model performs segmentation of individual lung-lobes but yields limited performance when dense pathologies are present or when fissures are not visible at every slice.
-
-- U-net(LTRCLobes_R231): This will run the R231 and LTRCLobes model and fuse the results. False negatives from LTRCLobes will be filled by R231 predictions and mapped to a neighbor label. False positives from LTRCLobes will be removed. The fusing process is computationally intensive and can, depdending on the data and results, take up to several minutes per volume.
-
-- [U-net(R231CovidWeb)](#COVID-19-Web)
-
-
-**Examples of the two models applied**. **Left:** U-net(R231), will distinguish between left and right lung and include very dense areas such as effusions (third row), tumor or severe fibrosis (fourth row) . **Right:** U-net(LTRLobes), will distinguish between lung lobes but will not include very dense areas. **LTRCLobes_R231** will fuse LTRCLobes and R231 results. **R231CovidWeb** is trained with aditional COVID-19 data.
-
-![alt text](figures/figure.png "Result examples")
-
-**Semantics of output**: \
-Two label models (Left-Right): \
-1 = Right lung \
-2 = Left lung
-
-Five label models (Lung lobes): \
-1 = Left upper lobe \
-2 = Left lower lobe \
-3 = Right upper lobe \
-4 = Right middle lobe \
-5 = Right lower lobe
-
-For more exciting research on lung CT data, checkout the website of our research group:
-https://www.cir.meduniwien.ac.at/research/lung/
-
-## Referencing and citing
-If you use this code or one of the trained models in your work please refer to:
-
->Hofmanninger, J., Prayer, F., Pan, J. et al. Automatic lung segmentation in routine imaging is primarily a data diversity problem, not a methodology problem. Eur Radiol Exp 4, 50 (2020). https://doi.org/10.1186/s41747-020-00173-2
-
-This paper contains a detailed description of the dataset used, a thorough evaluation of the U-net(R231) model, and a comparison to reference methods.
-
-## Installation
-```
-pip install lungmask
-```
-or
-```
-pip install git+https://github.com/JoHof/lungmask
-```
-or via conda
-```
-conda install conda-forge::lungmask
-```
-On Windows, depending on your setup, it may be necessary to install torch beforehand: https://pytorch.org
-
-## Runtime and GPU support
-Runtime between CPU-only and GPU supported inference varies greatly. Using the GPU, processing a volume takes only several seconds, using the CPU-only will take several minutes. To make use of the GPU make sure that your torch installation has CUDA support. In case of cuda out of memory errors reduce the batchsize to 1 with the optional argument ```--batchsize 1```
-
-## Usage
-### As a command line tool:
-```
-lungmask INPUT OUTPUT
-```
-If INPUT points to a file, the file will be processed. If INPUT points to a directory, the directory will be searched for DICOM series. The largest volume found (in terms of number of voxels) will be used to compute the lungmask. OUTPUT is the output filename. All ITK formats are supported.
-
-Choose a model: <br/>
-The U-net(R231) will be used as default. However, you can specify an alternative model such as LTRCLobes...
-
-```
-lungmask INPUT OUTPUT --modelname LTRCLobes
+## Installation (via github and pip)
+```shell 
+git clone https://github.com/giurdeluca/lungmask.git
+cd lungmask
+conda create env -n python=3.10 <env_name>
+conda activate <env_name>
+pip install -r requirements.txt
+pip install torch==1.12.1+cu113 torchvision==0.13.1+cu113 torchaudio==0.12.1 --extra-index-url https://download.pytorch.org/whl/cu113
 ```
 
-For additional options type:
-```
-lungmask -h
-```
+## Run inference with lungmask_BIDS.py
+### Basic Usage
 
-### As a python module:
-
-```
-from lungmask import LMInferer
-import SimpleITK as sitk
-
-inferer = LMInferer()
-
-input_image = sitk.ReadImage(INPUT)
-segmentation = inferer.apply(input_image)  # default model is U-net(R231)
-```
-input_image has to be a SimpleITK object.
-
-Load an alternative model like so:
-```
-inferer = LMInferer(modelname="R231CovidWeb")
+```bash
+python lungmask_script.py --input-list file_paths.txt --output-dir ./results/
 ```
 
-To use the model fusing capability for (e.g. LTRCLobes_R231) use:
-```
-inferer = LMInferer(modelname='LTRCLobes', fillmodel='R231')
+### Command Line Arguments
+
+| Argument | Type | Default | Description |
+|----------|------|---------|-------------|
+| `--segmentation` | str | `lungs` | Segmentation type: `lungs` (left/right) or `lobes` (5 lobes) |
+| `--fill` | flag | False | Run parallel fill model for improved segmentation (requires more resources) |
+| `--input-list` | str | `file_paths.txt` | Path to text file containing input file paths |
+| `--output-dir` | str | `./derived/pipeline/` | Directory to save output files |
+| `--emphysema` | flag | False | Compute emphysema metrics on segmented lungs |
+
+### Examples
+
+#### Basic lung segmentation:
+```bash
+python lungmask_script.py --segmentation lungs --input-list my_files.txt
 ```
 
-#### Numpy array support
-As of version 0.2.9, numpy arrays are supported as input volumes. This mode assumes the input numpy array has the following format for each axis:
-* first axis containing slices
-* second axis with chest to back
-* third axis with right to left
-
-## Limitations
-The model works on full slices only. The slice to process has to show the full lung and the lung has to be surrounded by tissue in order to get segmented. However, the model is quite stable to cases with a cropped field of view as long as the lung is surrounded by tissue.
-
-## COVID-19 Web
+#### Lobe segmentation with fill model:
+```bash
+python lungmask_script.py --segmentation lobes --fill --input-list my_files.txt
 ```
-lungmask INPUT OUTPUT --modelname R231CovidWeb
-```
-The regular U-net(R231) model works very well for COVID-19 CT scans. However, collections of slices and case reports from the web are often cropped, annotated or encoded in regular image formats so that the original hounsfield unit (HU) values can only be estimated. The training data of the U-net(R231CovidWeb) model was augmented with COVID-19 slices that were mapped back from regular imaging formats to HU. The data was collected and prepared by MedSeg (http://medicalsegmentation.com/covid19/). While the regular U-net(R231) showed very good results for these images there may be cases for which this model will yield slighty improved segmentations. Note that you have to map images back to HU when using images from the web. This [blog post](https://medium.com/@hbjenssen/covid-19-radiology-data-collection-and-preparation-for-artificial-intelligence-4ecece97bb5b) describes how you can do that. Alternatively you can set the ```--noHU``` tag.
-![alt text](figures/example_covid.jpg "COVID examples")
 
-## jpg, png and non HU images
-**This feature is only available in versions between 0.2.5 and 0.2.14**
-As of version 0.2.5 these images are supported. Use the ```--noHU``` tag if you process images that are not encoded in HU. Keep in mind that the models were trained on proper CT scans encoded in HU. The results on cropped, annotated, very high and very low intensity shifted images may not be very reliable. When using the ```--noHU``` tag only single slices can be processed.
+#### Full analysis with emphysema metrics:
+```bash
+python lungmask_script.py --segmentation lungs --emphysema --input-list my_files.txt --output-dir ./analysis_results/
+```
+
+## Input Format
+
+### File List Structure
+
+Create a text file (e.g., `file_paths.txt`) with one CT scan path per line:
+
+```
+/path/to/sub-001/ses-baseline/ct/sub-001_ses-baseline_ct.nii.gz
+/path/to/sub-002/ses-baseline/ct/sub-002_ses-baseline_ct.nii.gz
+/path/to/sub-003/ses-followup/ct/sub-003_ses-followup_ct.nii.gz
+```
+
+### BIDS Naming Convention
+
+Input files must follow BIDS naming convention with `sub-` and `ses-` identifiers:
+- `sub-XXX`: Subject identifier
+- `ses-YYY`: Session identifier
+- File format: `sub-XXX_ses-YYY_ct.nii.gz`
+
+## Output Structure
+
+The script generates outputs following BIDS structure:
+
+```
+output_dir/
+├── sub-001/
+│   └── ses-baseline/
+│       └── ct/
+│           ├── sub-001_ses-baseline_desc-lungsmask.nii.gz      # Lung mask
+│           ├── sub-001_ses-baseline_desc-emph.txt              # Emphysema scores (if --emphysema)
+│           └── sub-001_ses-baseline_desc-laa950mask.nii.gz     # LAA950 mask (if --emphysema)
+├── emphysema_results.csv                                       # Summary CSV (if --emphysema)
+└── lung_mask.log                                              # Processing log
+```
+
+## Emphysema Metrics
+
+When `--emphysema` flag is used, the following metrics are computed:
+
+### Low Attenuation Areas (LAA)
+- **LAA950**: Percentage of lung voxels ≤ -950 HU
+- **LAA910**: Percentage of lung voxels ≤ -910 HU  
+- **LAA856**: Percentage of lung voxels ≤ -856 HU
+
+### High Attenuation Areas (HAA)
+- **HAA700**: Percentage of lung voxels ≥ -700 HU
+- **HAA600**: Percentage of lung voxels ≥ -600 HU
+- **HAA500**: Percentage of lung voxels ≥ -500 HU
+- **HAA250**: Percentage of lung voxels ≥ -250 HU
+
+### Statistical Measures
+- **Percentiles**: 10th and 15th percentiles of HU values
+- **HU Statistics**: Mean, standard deviation, median, kurtosis, skewness, min, max
+
+### Output Files (Emphysema Mode)
+
+1. **Individual Text Files** (`*_desc-emph.txt`): Human-readable emphysema scores
+2. **LAA950 Masks** (`*_desc-laa950mask.nii.gz`): Binary masks of emphysematous regions
+3. **Summary CSV** (`emphysema_results.csv`): All metrics for all processed images
+
+## Models Used
+
+- **R231**: Default model for lung segmentation
+- **LTRCLobes**: Model for lobe-level segmentation
+- **Fill Model**: Optional model for improved segmentation quality
+
+## Logging
+
+The script provides comprehensive logging:
+- **Console Output**: Real-time processing updates
+- **Log File**: Detailed processing log saved to `lung_mask.log`
+- **Error Handling**: Graceful handling of processing failures
